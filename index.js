@@ -32,6 +32,12 @@ function generateTrackingId() {
 app.use(express.json());
 app.use(cors());
 
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -90,7 +96,6 @@ async function run() {
       next();
     };
 
-
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -138,6 +143,38 @@ async function run() {
         res.status(500).send({ message: "Internal server error." });
       }
     });
+
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = { $set: { role: "admin" } };
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
+    app.patch(
+      "/users/vendor/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = { $set: { role: "vendor" } };
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
+
+    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) };
+          const result = await usersCollection.deleteOne(query);
+          res.send(result);
+        });
 
     app.get("/tickets", async (req, res) => {
       try {
@@ -450,7 +487,6 @@ async function run() {
 
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { price } = req.body;
-      s;
       const amount = parseInt(price * 100);
 
       if (amount < 1) {
@@ -565,7 +601,7 @@ async function run() {
 
     app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
       const bookingId = req.params.id;
-      const payment = req.body; 
+      const payment = req.body;
       const existingBooking = await bookingsCollection.findOne({
         _id: new ObjectId(bookingId),
       });
@@ -577,7 +613,7 @@ async function run() {
 
       const paymentRecord = {
         ...payment,
-        email: req.decoded.email, 
+        email: req.decoded.email,
         date: new Date(),
         status: "paid",
       };
@@ -607,7 +643,7 @@ async function run() {
 
         const ticketQuery = { _id: new ObjectId(payment.ticketId) };
         const ticketUpdate = {
-          $inc: { quantity: -payment.quantity }, 
+          $inc: { quantity: -payment.quantity },
         };
         const updateTicketResult = await ticketsCollection.updateOne(
           ticketQuery,
@@ -634,8 +670,6 @@ async function run() {
     console.log(
       "✅ Pinged your deployment. Successfully connected to MongoDB!"
     );
-
-
   } finally {
     // await client.close();
   }
