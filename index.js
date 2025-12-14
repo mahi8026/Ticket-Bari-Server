@@ -15,7 +15,38 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
+function generateTrackingId() {
+  const prefix = "TRK";
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const datePart = `${y}${m}${d}`;
+  const randomBytes = crypto.randomBytes(5).toString("hex");
+  const randomPart = parseInt(randomBytes, 16)
+    .toString(36)
+    .toUpperCase()
+    .slice(0, 8);
+  return `${prefix}-${datePart}-${randomPart}`;
+}
 
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "unauthorized access - No header" });
+  }
+  const token = authHeader.split(" ")[1]; // Expecting "Bearer <token>"
+
+  try {
+    const decodedValue = await admin.auth().verifyIdToken(token);
+    req.decoded = decodedValue;
+    next();
+  } catch (err) {
+    return res
+      .status(401)
+      .send({ message: "unauthorized access - Invalid token" });
+  }
+};
 
 // --- Middleware ---
 app.use(express.json());
@@ -36,7 +67,14 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    
+    await client.connect();
+    console.log("✅ Connected to MongoDB Atlas");
+
+    const db = client.db("ticket-Bari-DB"); // Your Database Name
+    const usersCollection = db.collection("users");
+    const ticketsCollection = db.collection("tickets");
+    const bookingsCollection = db.collection("bookings");
+    const paymentsCollection = db.collection("payments");
   } finally {
     
     // await client.close();
