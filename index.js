@@ -93,6 +93,32 @@ async function run() {
       const user = await usersCollection.findOne({ email });
       res.send({ role: user?.role || "user" });
     });
+
+    app.get("/users/profile/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(403).send({ message: "Forbidden access." });
+      }
+
+      try {
+        const user = await usersCollection.findOne(
+          { email },
+          {
+            projection: { name: 1, email: 1, photo: 1, role: 1, status: 1 },
+          }
+        );
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found." });
+        }
+
+        res.send(user);
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+        res.status(500).send({ message: "Internal server error." });
+      }
+    });
   } finally {
   }
 }
