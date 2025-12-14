@@ -3,13 +3,11 @@ const app = express();
 require("dotenv").config();
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 const crypto = require("crypto");
-const admin = require("firebase-admin"); 
+const admin = require("firebase-admin");
 const serviceAccount = require("./serviceAccountKey.json");
-
-
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -30,12 +28,16 @@ function generateTrackingId() {
   return `${prefix}-${datePart}-${randomPart}`;
 }
 
+// --- Middleware ---
+app.use(express.json());
+app.use(cors());
+
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).send({ message: "unauthorized access - No header" });
   }
-  const token = authHeader.split(" ")[1]; // Expecting "Bearer <token>"
+  const token = authHeader.split(" ")[1];
 
   try {
     const decodedValue = await admin.auth().verifyIdToken(token);
@@ -47,12 +49,6 @@ const verifyToken = async (req, res, next) => {
       .send({ message: "unauthorized access - Invalid token" });
   }
 };
-
-// --- Middleware ---
-app.use(express.json());
-app.use(cors());
-
-
 
 // --- Database Connection ---
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.ocjxb4e.mongodb.net/?appName=Cluster0`;
@@ -70,14 +66,34 @@ async function run() {
     await client.connect();
     console.log("✅ Connected to MongoDB Atlas");
 
-    const db = client.db("ticket-Bari-DB"); // Your Database Name
+    const db = client.db("ticket-Bari-DB");
     const usersCollection = db.collection("users");
     const ticketsCollection = db.collection("tickets");
     const bookingsCollection = db.collection("bookings");
     const paymentsCollection = db.collection("payments");
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existingUser = await usersCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "user already exists", insertedId: null });
+      }
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/users/role/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+      res.send({ role: user?.role || "user" });
+    });
   } finally {
-    
-    // await client.close();
   }
 }
 run().catch(console.dir);
