@@ -125,12 +125,10 @@ async function run() {
         const { search, filter, sort, page, limit } = req.query;
 
         let query = {
-          
           verificationStatus: "approved",
         };
 
         if (search) {
-        
           query.$or = [
             { title: { $regex: search, $options: "i" } },
             { route: { $regex: search, $options: "i" } },
@@ -138,18 +136,15 @@ async function run() {
         }
 
         if (filter) {
-         
         }
 
         let sortOptions = { dateAdded: -1 };
         if (sort === "price_asc") {
-         
           sortOptions = { price: 1 };
         } else if (sort === "price_desc") {
-       
           sortOptions = { price: -1 };
         }
-       
+
         const pageNumber = parseInt(page) || 1;
         const limitNumber = parseInt(limit) || 10;
         const skip = (pageNumber - 1) * limitNumber;
@@ -176,11 +171,11 @@ async function run() {
         res.status(500).send({ message: "Failed to fetch tickets." });
       }
     });
-     app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
+    app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
       const ticket = req.body;
       const initialTicket = {
         ...ticket,
-        verificationStatus: "pending", 
+        verificationStatus: "pending",
         isAdvertised: false,
         dateAdded: new Date(),
       };
@@ -188,7 +183,6 @@ async function run() {
       res.send(result);
     });
     app.get("/tickets/advertised", async (req, res) => {
-      
       const result = await ticketsCollection
         .find({ verificationStatus: "approved", isAdvertised: true })
         .limit(5)
@@ -199,11 +193,10 @@ async function run() {
       const tickets = await ticketsCollection.find().toArray();
       res.send(tickets);
     });
-     app.get("/tickets/latest", async (req, res) => {
-      
+    app.get("/tickets/latest", async (req, res) => {
       const result = await ticketsCollection
         .find({ verificationStatus: "approved" })
-        .sort({ dateAdded: -1 }) 
+        .sort({ dateAdded: -1 })
         .limit(8)
         .toArray();
       res.send(result);
@@ -215,6 +208,100 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/tickets/vendor", verifyToken, verifyVendor, async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
+      // Only return tickets that match the provided email
+      const query = { vendorEmail: email };
+      const tickets = await ticketsCollection.find(query).toArray();
+      res.send(tickets);
+    });
+
+    app.get("/tickets/:id", async (req, res) => {
+      const id = req.params.id;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(404).send("404 | Invalid Ticket ID Format.");
+      }
+
+      try {
+        const query = { _id: new ObjectId(id) };
+        const ticket = await ticketsCollection.findOne(query);
+
+        if (!ticket) {
+          return res.status(404).send("404 | Ticket Not Found.");
+        }
+
+        if (ticket.verificationStatus !== "approved") {
+          return res
+            .status(404)
+            .send("404 | Ticket Not Found or Unauthorized Access.");
+        }
+
+        res.send(ticket);
+      } catch (error) {
+        console.error("Error fetching single ticket:", error);
+        res.status(500).send("500 | Internal Server Error.");
+      }
+    });
+
+    app.patch(
+      "/tickets/status/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const newStatus = req.body.status; 
+        const result = await ticketsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { verificationStatus: newStatus } }
+        );
+        res.send(result);
+      }
+    );
+
+    app.patch(
+      "/tickets/advertise/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const { isAdvertised } = req.body; 
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            isAdvertised: isAdvertised,
+          },
+        };
+        const result = await ticketsCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      }
+    );
+
+    app.delete("/tickets/:id", verifyToken, verifyVendor, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await ticketsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.get("/bookings", verifyToken, async (req, res) => {
+      const email = req.query.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(403).send({ message: "Forbidden access." });
+      }
+
+      const query = { userEmail: email };
+      const bookings = await bookingsCollection
+        .find(query)
+        .sort({ date: -1 })
+        .toArray();
+      res.send(bookings);
+    });
 
   } finally {
   }
