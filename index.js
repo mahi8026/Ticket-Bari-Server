@@ -119,6 +119,76 @@ async function run() {
         res.status(500).send({ message: "Internal server error." });
       }
     });
+
+    app.get("/tickets", async (req, res) => {
+      try {
+        const { search, filter, sort, page, limit } = req.query;
+
+        let query = {
+          
+          verificationStatus: "approved",
+        };
+
+        if (search) {
+        
+          query.$or = [
+            { title: { $regex: search, $options: "i" } },
+            { route: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        if (filter) {
+         
+        }
+
+        let sortOptions = { dateAdded: -1 };
+        if (sort === "price_asc") {
+         
+          sortOptions = { price: 1 };
+        } else if (sort === "price_desc") {
+       
+          sortOptions = { price: -1 };
+        }
+       
+        const pageNumber = parseInt(page) || 1;
+        const limitNumber = parseInt(limit) || 10;
+        const skip = (pageNumber - 1) * limitNumber;
+
+        const tickets = await ticketsCollection
+          .find(query)
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limitNumber)
+          .toArray();
+
+        const totalTickets = await ticketsCollection.countDocuments(query);
+        const totalPages = Math.ceil(totalTickets / limitNumber);
+
+        res.send({
+          tickets,
+          totalTickets,
+          totalPages,
+          currentPage: pageNumber,
+          limit: limitNumber,
+        });
+      } catch (error) {
+        console.error("Error fetching tickets:", error);
+        res.status(500).send({ message: "Failed to fetch tickets." });
+      }
+    });
+     app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
+      const ticket = req.body;
+      const initialTicket = {
+        ...ticket,
+        verificationStatus: "pending", 
+        isAdvertised: false,
+        dateAdded: new Date(),
+      };
+      const result = await ticketsCollection.insertOne(initialTicket);
+      res.send(result);
+    });
+
+
   } finally {
   }
 }
