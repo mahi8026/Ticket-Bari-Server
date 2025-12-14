@@ -187,6 +187,33 @@ async function run() {
       const result = await ticketsCollection.insertOne(initialTicket);
       res.send(result);
     });
+    app.get("/tickets/advertised", async (req, res) => {
+      
+      const result = await ticketsCollection
+        .find({ verificationStatus: "approved", isAdvertised: true })
+        .limit(5)
+        .toArray();
+      res.send(result);
+    });
+    app.get("/tickets/all", verifyToken, verifyAdmin, async (req, res) => {
+      const tickets = await ticketsCollection.find().toArray();
+      res.send(tickets);
+    });
+     app.get("/tickets/latest", async (req, res) => {
+      
+      const result = await ticketsCollection
+        .find({ verificationStatus: "approved" })
+        .sort({ dateAdded: -1 }) 
+        .limit(8)
+        .toArray();
+      res.send(result);
+    });
+    app.get("/tickets/approved", async (req, res) => {
+      const result = await ticketsCollection
+        .find({ verificationStatus: "approved" })
+        .toArray();
+      res.send(result);
+    });
 
 
   } finally {
