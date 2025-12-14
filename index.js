@@ -72,6 +72,25 @@ async function run() {
     const bookingsCollection = db.collection("bookings");
     const paymentsCollection = db.collection("payments");
 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    const verifyVendor = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== "vendor") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -611,8 +630,14 @@ async function run() {
       }
     });
 
+    await client.db("admin").command({ ping: 1 });
+    console.log(
+      "✅ Pinged your deployment. Successfully connected to MongoDB!"
+    );
+
 
   } finally {
+    // await client.close();
   }
 }
 run().catch(console.dir);
