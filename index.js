@@ -253,7 +253,7 @@ async function run() {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        const newStatus = req.body.status; 
+        const newStatus = req.body.status;
         const result = await ticketsCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { verificationStatus: newStatus } }
@@ -268,7 +268,7 @@ async function run() {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        const { isAdvertised } = req.body; 
+        const { isAdvertised } = req.body;
 
         const filter = { _id: new ObjectId(id) };
         const updateDoc = {
@@ -305,7 +305,7 @@ async function run() {
 
     app.delete("/bookings/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const userEmail = req.decoded.email; 
+      const userEmail = req.decoded.email;
       if (!ObjectId.isValid(id)) {
         return res.status(400).send({ message: "Invalid booking ID format." });
       }
@@ -319,14 +319,12 @@ async function run() {
           return res.status(404).send({ message: "Booking not found." });
         }
 
-        
         if (booking.userEmail !== userEmail) {
           return res.status(403).send({
             message: "Forbidden access: You do not own this booking.",
           });
         }
 
-       
         if (booking.status === "paid") {
           return res.status(400).send({
             message:
@@ -354,7 +352,6 @@ async function run() {
     app.get("/bookings/vendor", verifyToken, verifyVendor, async (req, res) => {
       const vendorEmail = req.query.email;
 
-
       const pipeline = [
         {
           $lookup: {
@@ -374,13 +371,13 @@ async function run() {
         },
         {
           $project: {
-            _id: 1, 
+            _id: 1,
             userEmail: 1,
             date: 1,
             quantity: 1,
             totalPrice: 1,
             status: 1,
-            title: "$ticketInfo.title", 
+            title: "$ticketInfo.title",
           },
         },
       ];
@@ -412,13 +409,13 @@ async function run() {
       res.send({ insertedId: result.insertedId });
     });
 
-     app.patch(
+    app.patch(
       "/bookings/status/:id",
       verifyToken,
       verifyVendor,
       async (req, res) => {
         const id = req.params.id;
-        const newStatus = req.body.status; 
+        const newStatus = req.body.status;
 
         if (!["approved", "rejected"].includes(newStatus)) {
           return res.status(400).send({ message: "Invalid status provided." });
@@ -433,7 +430,8 @@ async function run() {
     );
 
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
-      const { price } = req.body;s
+      const { price } = req.body;
+      s;
       const amount = parseInt(price * 100);
 
       if (amount < 1) {
@@ -456,6 +454,41 @@ async function run() {
       }
     });
 
+    app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.countDocuments();
+        const totalTickets = await ticketsCollection.countDocuments();
+        const totalBookings = await bookingsCollection.countDocuments();
+
+        // Revenue is calculated from paid bookings/payments
+        const totalRevenueResult = await paymentsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: null,
+                totalRevenue: { $sum: "$totalPrice" },
+              },
+            },
+          ])
+          .toArray();
+
+        const totalRevenue =
+          totalRevenueResult.length > 0
+            ? totalRevenueResult[0].totalRevenue
+            : 0;
+
+        res.send({
+          totalUsers,
+          totalTickets,
+          totalBookings,
+          totalRevenue: parseFloat(totalRevenue).toFixed(2),
+        });
+      } catch (error) {
+        console.error("Error fetching admin stats:", error);
+        res.status(500).send({ message: "Failed to fetch admin statistics." });
+      }
+    });
+
     app.get("/payments", verifyToken, async (req, res) => {
       const email = req.query.email;
 
@@ -464,7 +497,7 @@ async function run() {
       }
 
       try {
-        const query = { email: email }; 
+        const query = { email: email };
         const transactions = await paymentsCollection
           .find(query)
           .sort({ date: -1 })
@@ -477,7 +510,106 @@ async function run() {
       }
     });
 
-    
+    app.post("/payment", verifyToken, async (req, res) => {
+      const payment = req.body;
+      const { bookingId, ticketId, quantity } = payment;
+
+      const paymentResult = await paymentsCollection.insertOne(payment);
+
+      const bookingUpdateResult = await bookingsCollection.updateOne(
+        { _id: new ObjectId(bookingId) },
+        {
+          $set: {
+            status: "paid",
+            transactionId: payment.transactionId,
+            paymentDate: new Date(),
+          },
+        }
+      );
+
+      const ticketUpdateResult = await ticketsCollection.updateOne(
+        { _id: new ObjectId(ticketId) },
+        {
+          $inc: {
+            quantity: -quantity,
+          },
+        }
+      );
+
+      res.send({
+        paymentResult,
+        bookingUpdateResult,
+        ticketUpdateResult,
+        message: "Payment and booking successfully finalized.",
+      });
+    });
+
+    app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
+      const bookingId = req.params.id;
+      const payment = req.body; 
+      const existingBooking = await bookingsCollection.findOne({
+        _id: new ObjectId(bookingId),
+      });
+      if (!existingBooking || existingBooking.userEmail !== req.decoded.email) {
+        return res
+          .status(403)
+          .send({ success: false, message: "Forbidden or Booking not found" });
+      }
+
+      const paymentRecord = {
+        ...payment,
+        email: req.decoded.email, 
+        date: new Date(),
+        status: "paid",
+      };
+
+      try {
+        const paymentRecord = {
+          ...payment,
+          email: req.decoded.email,
+          date: new Date(),
+          status: "paid",
+        };
+
+        const insertResult = await paymentsCollection.insertOne(paymentRecord);
+
+        const bookingQuery = { _id: new ObjectId(bookingId) };
+        const bookingUpdate = {
+          $set: {
+            status: "paid",
+            transactionId: payment.transactionId,
+            paymentDate: paymentRecord.date,
+          },
+        };
+        const updateBookingResult = await bookingsCollection.updateOne(
+          bookingQuery,
+          bookingUpdate
+        );
+
+        const ticketQuery = { _id: new ObjectId(payment.ticketId) };
+        const ticketUpdate = {
+          $inc: { quantity: -payment.quantity }, 
+        };
+        const updateTicketResult = await ticketsCollection.updateOne(
+          ticketQuery,
+          ticketUpdate
+        );
+
+        res.send({
+          success: true,
+          message: "Payment processed successfully",
+          insertResult,
+          updateBookingResult,
+          updateTicketResult,
+        });
+      } catch (error) {
+        console.error("Payment finalization error:", error);
+        res.status(500).send({
+          success: false,
+          message: "Server failed to finalize payment details.",
+        });
+      }
+    });
 
 
   } finally {
