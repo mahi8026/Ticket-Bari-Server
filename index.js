@@ -303,6 +303,183 @@ async function run() {
       res.send(bookings);
     });
 
+    app.delete("/bookings/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const userEmail = req.decoded.email; 
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ message: "Invalid booking ID format." });
+      }
+
+      try {
+        const booking = await bookingsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!booking) {
+          return res.status(404).send({ message: "Booking not found." });
+        }
+
+        
+        if (booking.userEmail !== userEmail) {
+          return res.status(403).send({
+            message: "Forbidden access: You do not own this booking.",
+          });
+        }
+
+       
+        if (booking.status === "paid") {
+          return res.status(400).send({
+            message:
+              "Cannot delete a paid booking. Contact support for refunds.",
+          });
+        }
+
+        const result = await bookingsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(500).send({ message: "Failed to delete booking." });
+        }
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error deleting booking:", error);
+        res
+          .status(500)
+          .send({ message: "Internal server error during deletion." });
+      }
+    });
+
+    app.get("/bookings/vendor", verifyToken, verifyVendor, async (req, res) => {
+      const vendorEmail = req.query.email;
+
+
+      const pipeline = [
+        {
+          $lookup: {
+            from: "tickets",
+            localField: "ticketId",
+            foreignField: "_id",
+            as: "ticketInfo",
+          },
+        },
+        {
+          $unwind: "$ticketInfo",
+        },
+        {
+          $match: {
+            "ticketInfo.vendorEmail": vendorEmail,
+          },
+        },
+        {
+          $project: {
+            _id: 1, 
+            userEmail: 1,
+            date: 1,
+            quantity: 1,
+            totalPrice: 1,
+            status: 1,
+            title: "$ticketInfo.title", 
+          },
+        },
+      ];
+
+      const result = await bookingsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
+    app.post("/bookings", verifyToken, async (req, res) => {
+      const booking = req.body;
+      const { ticketId, quantity } = booking;
+
+      const ticket = await ticketsCollection.findOne({
+        _id: new ObjectId(ticketId),
+      });
+
+      if (!ticket) {
+        return res.status(404).send({ message: "Ticket not found." });
+      }
+
+      if (ticket.quantity < quantity) {
+        return res
+          .status(400)
+          .send({ message: "Requested quantity exceeds available stock." });
+      }
+
+      const result = await bookingsCollection.insertOne(booking);
+
+      res.send({ insertedId: result.insertedId });
+    });
+
+     app.patch(
+      "/bookings/status/:id",
+      verifyToken,
+      verifyVendor,
+      async (req, res) => {
+        const id = req.params.id;
+        const newStatus = req.body.status; 
+
+        if (!["approved", "rejected"].includes(newStatus)) {
+          return res.status(400).send({ message: "Invalid status provided." });
+        }
+
+        const result = await bookingsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: newStatus } }
+        );
+        res.send(result);
+      }
+    );
+
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
+      const { price } = req.body;s
+      const amount = parseInt(price * 100);
+
+      if (amount < 1) {
+        return res.status(400).send({ message: "Invalid payment amount." });
+      }
+
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      } catch (error) {
+        console.error("Error creating payment intent:", error);
+        res.status(500).send({ message: "Failed to create payment intent." });
+      }
+    });
+
+    app.get("/payments", verifyToken, async (req, res) => {
+      const email = req.query.email;
+
+      if (req.decoded.email !== email) {
+        return res.status(403).send({ message: "Forbidden access." });
+      }
+
+      try {
+        const query = { email: email }; 
+        const transactions = await paymentsCollection
+          .find(query)
+          .sort({ date: -1 })
+          .toArray();
+
+        res.send(transactions);
+      } catch (error) {
+        console.error("Error fetching transactions:", error);
+        res.status(500).send({ message: "Internal server error." });
+      }
+    });
+
+    
+
+
   } finally {
   }
 }
