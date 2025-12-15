@@ -70,7 +70,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    console.log("✅ Connected to MongoDB Atlas");
+    console.log(" Connected to MongoDB Atlas");
 
     const db = client.db("ticket-Bari-DB");
     const usersCollection = db.collection("users");
@@ -170,30 +170,43 @@ async function run() {
     );
 
     app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
-          const id = req.params.id;
-          const query = { _id: new ObjectId(id) };
-          const result = await usersCollection.deleteOne(query);
-          res.send(result);
-        });
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    });
 
     app.get("/tickets", async (req, res) => {
       try {
         const { search, filter, sort, page, limit } = req.query;
 
-        let query = {
-          verificationStatus: "approved",
-        };
-
-        if (search) {
-          query.$or = [
-            { title: { $regex: search, $options: "i" } },
-            { route: { $regex: search, $options: "i" } },
-          ];
-        }
+        let conditions = [{ verificationStatus: "approved" }];
 
         if (filter) {
+          conditions.push({ ticketType: filter });
         }
 
+        if (search) {
+          const cleanedSearch = search.replace(/[^a-zA-Z0-9\s]/g, " ").trim();
+
+          const searchKeywords = cleanedSearch
+            .split(/\s+/)
+            .filter((word) => word.length > 0);
+
+          if (searchKeywords.length > 0) {
+            const searchOrConditions = searchKeywords.flatMap((keyword) => [
+              { from: { $regex: keyword, $options: "i" } },
+              { to: { $regex: keyword, $options: "i" } },
+            ]);
+            conditions.push({ $or: searchOrConditions });
+          }
+        }
+        let query = {};
+        if (conditions.length > 0) {
+          query = { $and: conditions };
+        }
+
+        // SORT LOGIC
         let sortOptions = { dateAdded: -1 };
         if (sort === "price_asc") {
           sortOptions = { price: 1 };
@@ -202,8 +215,11 @@ async function run() {
         }
 
         const pageNumber = parseInt(page) || 1;
-        const limitNumber = parseInt(limit) || 10;
+        const limitNumber = parseInt(limit) || 6;
         const skip = (pageNumber - 1) * limitNumber;
+
+        const totalTickets = await ticketsCollection.countDocuments(query);
+        const totalPages = Math.ceil(totalTickets / limitNumber);
 
         const tickets = await ticketsCollection
           .find(query)
@@ -211,9 +227,6 @@ async function run() {
           .skip(skip)
           .limit(limitNumber)
           .toArray();
-
-        const totalTickets = await ticketsCollection.countDocuments(query);
-        const totalPages = Math.ceil(totalTickets / limitNumber);
 
         res.send({
           tickets,
@@ -245,6 +258,37 @@ async function run() {
         .toArray();
       res.send(result);
     });
+    
+    app.patch(
+      "/users/fraud/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        
+        // 1. Update user role/status
+        const updateDoc = { $set: { role: "fraud", status: "banned" } };
+        const userUpdateResult = await usersCollection.updateOne(
+          filter,
+          updateDoc
+        );
+
+        // 2. Hide all of this vendor's tickets (e.g., set verificationStatus to 'fraud')
+        const userToUpdate = await usersCollection.findOne({ _id: new ObjectId(id) });
+        if (userToUpdate && userToUpdate.email) {
+            const ticketUpdateResult = await ticketsCollection.updateMany(
+                { vendorEmail: userToUpdate.email },
+                { $set: { verificationStatus: "fraud" } }
+            );
+            return res.send({ userUpdateResult, ticketUpdateResult });
+        }
+        
+        res.send({ userUpdateResult });
+      }
+    );
+
+
     app.get("/tickets/all", verifyToken, verifyAdmin, async (req, res) => {
       const tickets = await ticketsCollection.find().toArray();
       res.send(tickets);
@@ -428,8 +472,8 @@ async function run() {
         {
           $project: {
             _id: 1,
-            userEmail: 1,
-            date: 1,
+            userEmail: 1, 
+            bookingDate: 1,
             quantity: 1,
             totalPrice: 1,
             status: 1,
@@ -668,7 +712,7 @@ async function run() {
 
     await client.db("admin").command({ ping: 1 });
     console.log(
-      "✅ Pinged your deployment. Successfully connected to MongoDB!"
+      " Pinged your deployment. Successfully connected to MongoDB!"
     );
   } finally {
     // await client.close();
@@ -682,5 +726,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+  console.log(` Server running on port ${port}`);
 });
