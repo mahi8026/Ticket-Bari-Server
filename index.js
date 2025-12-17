@@ -4,14 +4,26 @@ require("dotenv").config();
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const port = process.env.PORT || 5000;
+
 const crypto = require("crypto");
 const admin = require("firebase-admin");
-const serviceAccount = require("./serviceAccountKey.json");
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+const port = process.env.PORT || 5000;
+
+//const serviceAccount = require("./serviceAccountKey.json");
+
+// const serviceAccount = require("./firebase-admin-key.json");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
+const serviceAccount = JSON.parse(decoded);
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
 function generateTrackingId() {
   const prefix = "TRK";
@@ -69,8 +81,8 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
-    console.log(" Connected to MongoDB Atlas");
+    //await client.connect();
+    //console.log(" Connected to MongoDB Atlas");
 
     const db = client.db("ticket-Bari-DB");
     const usersCollection = db.collection("users");
@@ -258,7 +270,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    
+
     app.patch(
       "/users/fraud/:id",
       verifyToken,
@@ -266,7 +278,7 @@ async function run() {
       async (req, res) => {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
-        
+
         // 1. Update user role/status
         const updateDoc = { $set: { role: "fraud", status: "banned" } };
         const userUpdateResult = await usersCollection.updateOne(
@@ -275,19 +287,20 @@ async function run() {
         );
 
         // 2. Hide all of this vendor's tickets (e.g., set verificationStatus to 'fraud')
-        const userToUpdate = await usersCollection.findOne({ _id: new ObjectId(id) });
+        const userToUpdate = await usersCollection.findOne({
+          _id: new ObjectId(id),
+        });
         if (userToUpdate && userToUpdate.email) {
-            const ticketUpdateResult = await ticketsCollection.updateMany(
-                { vendorEmail: userToUpdate.email },
-                { $set: { verificationStatus: "fraud" } }
-            );
-            return res.send({ userUpdateResult, ticketUpdateResult });
+          const ticketUpdateResult = await ticketsCollection.updateMany(
+            { vendorEmail: userToUpdate.email },
+            { $set: { verificationStatus: "fraud" } }
+          );
+          return res.send({ userUpdateResult, ticketUpdateResult });
         }
-        
+
         res.send({ userUpdateResult });
       }
     );
-
 
     app.get("/tickets/all", verifyToken, verifyAdmin, async (req, res) => {
       const tickets = await ticketsCollection.find().toArray();
@@ -472,7 +485,7 @@ async function run() {
         {
           $project: {
             _id: 1,
-            userEmail: 1, 
+            userEmail: 1,
             bookingDate: 1,
             quantity: 1,
             totalPrice: 1,
@@ -710,10 +723,10 @@ async function run() {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      " Pinged your deployment. Successfully connected to MongoDB!"
-    );
+    //await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //" Pinged your deployment. Successfully connected to MongoDB!"
+    //);
   } finally {
     // await client.close();
   }
@@ -726,5 +739,7 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(` Server running on port ${port}`);
+console.log(` Server running on port ${port}`);
 });
+
+
