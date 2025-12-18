@@ -279,14 +279,11 @@ async function run() {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
 
-        // 1. Update user role/status
         const updateDoc = { $set: { role: "fraud", status: "banned" } };
         const userUpdateResult = await usersCollection.updateOne(
           filter,
           updateDoc
         );
-
-        // 2. Hide all of this vendor's tickets (e.g., set verificationStatus to 'fraud')
         const userToUpdate = await usersCollection.findOne({
           _id: new ObjectId(id),
         });
@@ -306,6 +303,7 @@ async function run() {
       const tickets = await ticketsCollection.find().toArray();
       res.send(tickets);
     });
+
     app.get("/tickets/latest", async (req, res) => {
       const result = await ticketsCollection
         .find({ verificationStatus: "approved" })
@@ -314,6 +312,7 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
     app.get("/tickets/approved", async (req, res) => {
       const result = await ticketsCollection
         .find({ verificationStatus: "approved" })
@@ -326,7 +325,7 @@ async function run() {
       if (!email) {
         return res.status(400).send({ message: "Email is required" });
       }
-      // Only return tickets that match the provided email
+      
       const query = { vendorEmail: email };
       const tickets = await ticketsCollection.find(query).toArray();
       res.send(tickets);
@@ -749,7 +748,7 @@ run().catch(console.dir);
 
 // --- Server Routes ---
 app.get("/", (req, res) => {
-  res.send("Ticket Bari Server is Running");
+  res.send("Ticket Bari Server is Running..");
 });
 
 app.listen(port, () => {
