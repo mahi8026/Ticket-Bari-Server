@@ -500,26 +500,40 @@ async function run() {
     });
 
     app.post("/bookings", verifyToken, async (req, res) => {
-      const booking = req.body;
-      const { ticketId, quantity } = booking;
+      const { ticketId, quantity, ...bookingData } = req.body;
 
-      const ticket = await ticketsCollection.findOne({
-        _id: new ObjectId(ticketId),
-      });
+      const numTickets = parseInt(quantity);
 
-      if (!ticket) {
-        return res.status(404).send({ message: "Ticket not found." });
+      if (isNaN(numTickets) || numTickets < 1) {
+      return res.status(400).send({ message: "Invalid quantity provided." });
+    }
+
+      try {
+        const updateTicket = await ticketsCollection.updateOne(
+          {
+            _id: new ObjectId(ticketId),
+            seatsAvailable: { $gte: parseInt(numTickets) },
+          },
+          { $inc: { seatsAvailable: -numTickets } }
+        );
+
+        if (updateTicket.modifiedCount === 0) {
+          return res.status(400).send({
+            message: "This ticket is now sold out!",
+          });
+        }
+        const result = await bookingsCollection.insertOne({
+          ticketId,
+          quantity: numTickets,
+          ...bookingData,
+          status: "pending",
+          bookingDate: new Date(),
+        });
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Internal server error" });
       }
-
-      if (ticket.quantity < quantity) {
-        return res
-          .status(400)
-          .send({ message: "Requested quantity exceeds available stock." });
-      }
-
-      const result = await bookingsCollection.insertOne(booking);
-
-      res.send({ insertedId: result.insertedId });
     });
 
     app.patch(
@@ -739,7 +753,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-console.log(` Server running on port ${port}`);
+  console.log(` Server running on port ${port}`);
 });
-
-
