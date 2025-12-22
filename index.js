@@ -44,11 +44,11 @@ function generateTrackingId() {
 app.use(express.json());
 app.use(cors());
 
-app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-  next();
-});
+//app.use((req, res, next) => {
+  //res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  //res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+ // next();
+//});
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
