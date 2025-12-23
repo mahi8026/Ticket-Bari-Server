@@ -275,7 +275,7 @@ app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
 app.get("/tickets/advertised", async (req, res) => {
   const result = await ticketsCollection
     .find({ verificationStatus: "approved", isAdvertised: true })
-    .limit(5)
+    .limit(6)
     .toArray();
   res.send(result);
 });
