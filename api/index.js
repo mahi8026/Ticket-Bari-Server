@@ -6,7 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const crypto = require("crypto");
 const admin = require("firebase-admin");
-const port = process.env.PORT || 5000;
+//const port = process.env.PORT || 5000;
 
 //const serviceAccount = require("./serviceAccountKey.json");
 
