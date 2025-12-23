@@ -711,5 +711,9 @@ async function run() {
 }
 run().catch(console.dir);
 
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(5000, () => console.log("Server running locally"));
+}
+
 
 module.exports = app;
