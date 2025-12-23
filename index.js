@@ -28,10 +28,22 @@ try {
 }
 
 if (!admin.apps.length) {
+  if (!process.env.FB_SERVICE_KEY) {
+    throw new Error("Firebase service key missing");
+  }
+
+  const decoded = Buffer.from(
+    process.env.FB_SERVICE_KEY,
+    "base64"
+  ).toString("utf8");
+
+  const serviceAccount = JSON.parse(decoded);
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
 }
+
 
 // --- Middleware ---
 app.use(express.json());
@@ -699,8 +711,5 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.listen(port, () => {
-  console.log(` Server running on port ${port}`);
-});
 
 module.exports = app;
