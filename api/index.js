@@ -32,10 +32,9 @@ if (!admin.apps.length) {
     throw new Error("Firebase service key missing");
   }
 
-  const decoded = Buffer.from(
-    process.env.FB_SERVICE_KEY,
-    "base64"
-  ).toString("utf8");
+  const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+    "utf8"
+  );
 
   const serviceAccount = JSON.parse(decoded);
 
@@ -44,10 +43,18 @@ if (!admin.apps.length) {
   });
 }
 
-
 // --- Middleware ---
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://ticket-bari.web.app",
+      "https://ticket-bari.firebaseapp.com",
+      "http://localhost:5173",
+    ],
+    credentials: true,
+  })
+);
 
 // --- Database Connection ---
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.ocjxb4e.mongodb.net/?appName=Cluster0`;
@@ -496,13 +503,15 @@ app.post("/bookings", verifyToken, async (req, res) => {
     const updateTicket = await ticketsCollection.updateOne(
       {
         _id: new ObjectId(ticketId),
-        seatsAvailable: { $gte: numTickets } 
+        seatsAvailable: { $gte: numTickets },
       },
       { $inc: { seatsAvailable: -numTickets } }
     );
 
     if (updateTicket.modifiedCount === 0) {
-      return res.status(400).send({ message: "Not enough seats available or Ticket not found." });
+      return res
+        .status(400)
+        .send({ message: "Not enough seats available or Ticket not found." });
     }
 
     const result = await bookingsCollection.insertOne({
@@ -569,7 +578,7 @@ app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const totalUsers = await usersCollection.countDocuments();
     const totalTickets = await ticketsCollection.countDocuments();
-    const totalBookings = await bookingsCollection.countDocuments(); 
+    const totalBookings = await bookingsCollection.countDocuments();
 
     const totalRevenueResult = await paymentsCollection
       .aggregate([
@@ -654,18 +663,25 @@ app.post("/payment", verifyToken, async (req, res) => {
 
 app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
   const bookingId = req.params.id;
-  const payment = req.body; 
+  const payment = req.body;
 
   if (!ObjectId.isValid(bookingId)) {
-    return res.status(400).send({ success: false, message: "Invalid Booking ID format" });
+    return res
+      .status(400)
+      .send({ success: false, message: "Invalid Booking ID format" });
   }
 
   try {
-    const bookingQuery = { _id: new ObjectId(bookingId), userEmail: req.decoded.email };
-    
+    const bookingQuery = {
+      _id: new ObjectId(bookingId),
+      userEmail: req.decoded.email,
+    };
+
     const booking = await bookingsCollection.findOne(bookingQuery);
     if (!booking) {
-      return res.status(404).send({ success: false, message: "Booking not found" });
+      return res
+        .status(404)
+        .send({ success: false, message: "Booking not found" });
     }
 
     const paymentRecord = {
@@ -687,15 +703,19 @@ app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
       },
     });
 
-    res.send({ 
-      success: true, 
+    res.send({
+      success: true,
       message: "Payment finalized and booking updated",
-      modifiedCount: updateBooking.modifiedCount 
+      modifiedCount: updateBooking.modifiedCount,
     });
-
   } catch (error) {
     console.error("Payment finalization error:", error);
-    res.status(500).send({ success: false, message: "Server error during payment finalization" });
+    res
+      .status(500)
+      .send({
+        success: false,
+        message: "Server error during payment finalization",
+      });
   }
 });
 
@@ -711,9 +731,8 @@ async function run() {
 }
 run().catch(console.dir);
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== "production") {
   app.listen(5000, () => console.log("Server running locally"));
 }
-
 
 module.exports = app;
