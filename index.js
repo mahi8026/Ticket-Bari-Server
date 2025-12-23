@@ -474,30 +474,29 @@ app.get("/bookings/vendor", verifyToken, verifyVendor, async (req, res) => {
 
 app.post("/bookings", verifyToken, async (req, res) => {
   const { ticketId, quantity, ...bookingData } = req.body;
-
   const numTickets = parseInt(quantity);
 
-  if (isNaN(numTickets) || numTickets < 1) {
-        return res.status(400).send({ message: "Invalid quantity provided." });
-      }
+  if (!ticketId || isNaN(numTickets) || numTickets < 1) {
+    return res.status(400).send({ message: "Invalid ticket ID or quantity." });
+  }
 
   try {
     const updateTicket = await ticketsCollection.updateOne(
       {
         _id: new ObjectId(ticketId),
-        seatsAvailable: { $gte: parseInt(numTickets) },
+        seatsAvailable: { $gte: numTickets } 
       },
       { $inc: { seatsAvailable: -numTickets } }
     );
 
     if (updateTicket.modifiedCount === 0) {
-      return res.status(400).send({
-        message: "This ticket is now sold out!",
-      });
+      return res.status(400).send({ message: "Not enough seats available or Ticket not found." });
     }
+
     const result = await bookingsCollection.insertOne({
-      ticketId,
+      ticketId: new ObjectId(ticketId),
       quantity: numTickets,
+      userEmail: req.decoded.email, // Safety check
       ...bookingData,
       status: "pending",
       bookingDate: new Date(),
@@ -505,6 +504,7 @@ app.post("/bookings", verifyToken, async (req, res) => {
 
     res.send(result);
   } catch (error) {
+    console.error("Booking Error:", error);
     res.status(500).send({ message: "Internal server error" });
   }
 });
@@ -642,68 +642,48 @@ app.post("/payment", verifyToken, async (req, res) => {
 
 app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
   const bookingId = req.params.id;
-  const payment = req.body;
-  const existingBooking = await bookingsCollection.findOne({
-    _id: new ObjectId(bookingId),
-  });
-  if (!existingBooking || existingBooking.userEmail !== req.decoded.email) {
-    return res
-      .status(403)
-      .send({ success: false, message: "Forbidden or Booking not found" });
+  const payment = req.body; 
+
+  if (!ObjectId.isValid(bookingId)) {
+    return res.status(400).send({ success: false, message: "Invalid Booking ID format" });
   }
 
-  const paymentRecord = {
-    ...payment,
-    email: req.decoded.email,
-    date: new Date(),
-    status: "paid",
-  };
-
   try {
+    const bookingQuery = { _id: new ObjectId(bookingId), userEmail: req.decoded.email };
+    
+    const booking = await bookingsCollection.findOne(bookingQuery);
+    if (!booking) {
+      return res.status(404).send({ success: false, message: "Booking not found" });
+    }
+
     const paymentRecord = {
-      ...payment,
+      bookingId: new ObjectId(bookingId),
+      transactionId: payment.transactionId,
+      ticketId: payment.ticketId,
+      price: payment.price,
       email: req.decoded.email,
       date: new Date(),
       status: "paid",
     };
+    await paymentsCollection.insertOne(paymentRecord);
 
-    const insertResult = await paymentsCollection.insertOne(paymentRecord);
-
-    const bookingQuery = { _id: new ObjectId(bookingId) };
-    const bookingUpdate = {
+    const updateBooking = await bookingsCollection.updateOne(bookingQuery, {
       $set: {
         status: "paid",
         transactionId: payment.transactionId,
-        paymentDate: paymentRecord.date,
+        paymentDate: new Date(),
       },
-    };
-    const updateBookingResult = await bookingsCollection.updateOne(
-      bookingQuery,
-      bookingUpdate
-    );
-
-    const ticketQuery = { _id: new ObjectId(payment.ticketId) };
-    const ticketUpdate = {
-      $inc: { quantity: -payment.quantity },
-    };
-    const updateTicketResult = await ticketsCollection.updateOne(
-      ticketQuery,
-      ticketUpdate
-    );
-
-    res.send({
-      success: true,
-      message: "Payment processed successfully",
-      insertResult,
-      updateBookingResult,
-      updateTicketResult,
     });
+
+    res.send({ 
+      success: true, 
+      message: "Payment finalized and booking updated",
+      modifiedCount: updateBooking.modifiedCount 
+    });
+
   } catch (error) {
     console.error("Payment finalization error:", error);
-    res.status(500).send({
-      success: false,
-      message: "Server failed to finalize payment details.",
-    });
+    res.status(500).send({ success: false, message: "Server error during payment finalization" });
   }
 });
 
