@@ -4,10 +4,8 @@ require("dotenv").config();
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-
 const crypto = require("crypto");
 const admin = require("firebase-admin");
-
 const port = process.env.PORT || 5000;
 
 //const serviceAccount = require("./serviceAccountKey.json");
@@ -480,8 +478,8 @@ app.post("/bookings", verifyToken, async (req, res) => {
   const numTickets = parseInt(quantity);
 
   if (isNaN(numTickets) || numTickets < 1) {
-    return res.status(400).send({ message: "Invalid quantity provided." });
-  }
+        return res.status(400).send({ message: "Invalid quantity provided." });
+      }
 
   try {
     const updateTicket = await ticketsCollection.updateOne(
@@ -559,7 +557,7 @@ app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const totalUsers = await usersCollection.countDocuments();
     const totalTickets = await ticketsCollection.countDocuments();
-    const totalBookings = await bookingsCollection.countDocuments(); // Revenue is calculated from paid bookings/payments
+    const totalBookings = await bookingsCollection.countDocuments(); 
 
     const totalRevenueResult = await paymentsCollection
       .aggregate([
