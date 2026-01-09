@@ -456,39 +456,56 @@ app.delete("/bookings/:id", verifyToken, async (req, res) => {
 
 app.get("/bookings/vendor", verifyToken, verifyVendor, async (req, res) => {
   const vendorEmail = req.query.email;
+  
+  if (!vendorEmail) {
+    return res.status(400).send({ message: "Email is required" });
+  }
 
-  const pipeline = [
-    {
-      $lookup: {
-        from: "tickets",
-        localField: "ticketId",
-        foreignField: "_id",
-        as: "ticketInfo",
+  try {
+    const pipeline = [
+      {
+        $lookup: {
+          from: "tickets",
+          localField: "ticketId",
+          foreignField: "_id",
+          as: "ticketInfo",
+        },
       },
-    },
-    {
-      $unwind: "$ticketInfo",
-    },
-    {
-      $match: {
-        "ticketInfo.vendorEmail": vendorEmail,
+      {
+        $unwind: "$ticketInfo",
       },
-    },
-    {
-      $project: {
-        _id: 1,
-        userEmail: 1,
-        bookingDate: 1,
-        quantity: 1,
-        totalPrice: 1,
-        status: 1,
-        title: "$ticketInfo.title",
+      {
+        $match: {
+          "ticketInfo.vendorEmail": vendorEmail,
+        },
       },
-    },
-  ];
+      {
+        $project: {
+          _id: 1,
+          userEmail: 1,
+          date: "$bookingDate",
+          bookingDate: 1,
+          quantity: 1,
+          totalPrice: 1,
+          status: 1,
+          title: "$ticketInfo.title",
+          ticketId: 1,
+          unitPrice: 1,
+          userName: 1,
+          departureDate: 1,
+        },
+      },
+      {
+        $sort: { bookingDate: -1 },
+      },
+    ];
 
-  const result = await bookingsCollection.aggregate(pipeline).toArray();
-  res.send(result);
+    const result = await bookingsCollection.aggregate(pipeline).toArray();
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching vendor bookings:", error);
+    res.status(500).send({ message: "Failed to fetch vendor bookings." });
+  }
 });
 
 app.post("/bookings", verifyToken, async (req, res) => {
