@@ -274,18 +274,34 @@ app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
 });
 app.get("/tickets/advertised", async (req, res) => {
   try {
+    console.log("🔍 Fetching advertised tickets...");
+    
+    // First, let's see all tickets that are marked as advertised
+    const allAdvertised = await ticketsCollection
+      .find({ isAdvertised: true })
+      .toArray();
+    
+    console.log(`📊 Total tickets with isAdvertised=true: ${allAdvertised.length}`);
+    
+    // Now get the approved and advertised ones
     const result = await ticketsCollection
-      .find({
-        verificationStatus: "approved",
-        isAdvertised: true,
+      .find({ 
+        verificationStatus: "approved", 
+        isAdvertised: true 
       })
       .limit(6)
       .toArray();
-
-    console.log(`Found ${result.length} advertised tickets`);
+    
+    console.log(`✅ Approved + Advertised tickets: ${result.length}`);
+    console.log("📋 Tickets found:", result.map(t => ({ 
+      title: t.title, 
+      isAdvertised: t.isAdvertised, 
+      verificationStatus: t.verificationStatus 
+    })));
+    
     res.send(result);
   } catch (error) {
-    console.error("Error fetching advertised tickets:", error);
+    console.error("❌ Error fetching advertised tickets:", error);
     res.status(500).send({ message: "Failed to fetch advertised tickets" });
   }
 });
