@@ -273,11 +273,21 @@ app.post("/tickets", verifyToken, verifyVendor, async (req, res) => {
   res.send(result);
 });
 app.get("/tickets/advertised", async (req, res) => {
-  const result = await ticketsCollection
-    .find({ verificationStatus: "approved", isAdvertised: true })
-    .limit(6)
-    .toArray();
-  res.send(result);
+  try {
+    const result = await ticketsCollection
+      .find({
+        verificationStatus: "approved",
+        isAdvertised: true,
+      })
+      .limit(6)
+      .toArray();
+
+    console.log(`Found ${result.length} advertised tickets`);
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching advertised tickets:", error);
+    res.status(500).send({ message: "Failed to fetch advertised tickets" });
+  }
 });
 
 app.patch("/users/fraud/:id", verifyToken, verifyAdmin, async (req, res) => {
@@ -456,7 +466,7 @@ app.delete("/bookings/:id", verifyToken, async (req, res) => {
 
 app.get("/bookings/vendor", verifyToken, verifyVendor, async (req, res) => {
   const vendorEmail = req.query.email;
-  
+
   if (!vendorEmail) {
     return res.status(400).send({ message: "Email is required" });
   }
@@ -727,12 +737,10 @@ app.patch("/bookings/pay/:id", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("Payment finalization error:", error);
-    res
-      .status(500)
-      .send({
-        success: false,
-        message: "Server error during payment finalization",
-      });
+    res.status(500).send({
+      success: false,
+      message: "Server error during payment finalization",
+    });
   }
 });
 
